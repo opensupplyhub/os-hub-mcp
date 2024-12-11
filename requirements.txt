@@ -1,3 +1,5 @@
 httpx
 python-dotenv
 mcp
+aiohttp
+anyio

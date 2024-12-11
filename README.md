@@ -45,7 +45,7 @@ On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
       "command": "uv",
       "args": [
         "--directory",
-        "/Users/katechapman/Documents/open-supply-hub-mcp/os-hub-mcp",
+        "~/Documents/open-supply-hub-mcp/os-hub-mcp",
         "run",
         "os-hub-mcp"
       ]
@@ -104,7 +104,7 @@ experience, we strongly recommend using the [MCP Inspector](https://github.com/m
 You can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:
 
 ```bash
-npx @modelcontextprotocol/inspector uv --directory /Users/katechapman/Documents/open-supply-hub-mcp/os-hub-mcp run os-hub-mcp
+npx @modelcontextprotocol/inspector uv --directory src run os_hub_servoce
 ```
 
 

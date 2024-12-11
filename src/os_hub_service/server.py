@@ -1,12 +1,9 @@
 import os
 import json
 import logging
-from datetime import datetime, timedelta
-from collections.abc import Sequence
 from typing import Any
 
 import aiohttp
-import anyio
 from dotenv import load_dotenv
 from mcp.server import Server
 from mcp.types import (
@@ -14,10 +11,7 @@ from mcp.types import (
     JSONRPCResponse,
     JSONRPCError,
     Tool,
-    TextContent,
-    Prompt,
-    PromptArgument,
-    LoggingLevel
+    TextContent
 )
 from mcp.server.stdio import stdio_server
 
@@ -25,7 +19,7 @@ from mcp.server.stdio import stdio_server
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)  # Set to DEBUG for detailed logs
 logger = logging.getLogger("os_hub_service")
 
 # API configuration
@@ -54,13 +48,23 @@ class OSHubServer(Server):
             self._initialized = True
             logger.info("Server initialization complete")
             
-            # Return initialization result
+            # Return initialization result with detailed capabilities
             return {
-                "protocolVersion": "1.0",
+                "protocolVersion": "2024-11-05",
                 "capabilities": {
-                    "tools": True,
-                    "resources": False,
-                    "prompts": True
+                    "tools": {
+                        "search_facilities": {
+                            "description": "Search for facilities by query in Open Supply Hub.",
+                            "command": "search_facilities"
+                        }
+                    },
+                    "resources": {},  # Empty object if no resources
+                    "prompts": {
+                        "example_prompt": {
+                            "description": "An example prompt",
+                            "options": ["option1", "option2"]
+                        }
+                    }
                 },
                 "serverInfo": {
                     "name": self.name,
@@ -147,8 +151,22 @@ async def main():
                                 jsonrpc="2.0",
                                 id=root.id,
                                 result={
-                                    "protocolVersion": "1.0",
-                                    "capabilities": {"tools": True, "resources": False, "prompts": True},
+                                    "protocolVersion": "2024-11-05",
+                                    "capabilities": {
+                                        "tools": {
+                                            "search_facilities": {
+                                                "description": "Search for facilities by query in Open Supply Hub.",
+                                                "command": "search_facilities"
+                                            }
+                                        },
+                                        "resources": {},  # Should be an object
+                                        "prompts": {
+                                            "example_prompt": {
+                                                "description": "An example prompt",
+                                                "options": ["option1", "option2"]
+                                            }
+                                        }
+                                    },
                                     "serverInfo": {"name": "opensupplyhub-server", "version": "0.1.0"},
                                 },
                             )
@@ -186,7 +204,7 @@ async def main():
                                     error={"code": -32603, "message": str(e)}
                                 )
                                 await write_stream.send(error_response)
-                        
+                    
             except Exception as e:
                 logger.error(f"Error reading input: {e}", exc_info=True)
                 raise

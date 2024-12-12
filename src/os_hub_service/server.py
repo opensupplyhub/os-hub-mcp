@@ -92,6 +92,26 @@ class OSHubServer(Server):
                 data = await response.json()
                 logger.debug(f"Response JSON: {data}")
                 return data
+            
+    async def fetch_facility_by_id(self, os_id: str) -> dict[str, Any]:
+        """Fetch detailed information for a specific facility by OS ID."""
+        if not self._initialized:
+            raise RuntimeError("Server is not initialized")
+    
+        logger.debug(f"Fetching facility details for OS ID: {os_id}")
+        headers = {"Authorization": f"Token {API_KEY}"}
+        url = f"{API_BASE_URL}/{os_id}"
+    
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                logger.debug(f"Received response: {response.status}")
+                if response.status == 404:
+                    raise ValueError(f"Facility with OS ID {os_id} not found")
+                if response.status != 200:
+                    raise RuntimeError(f"Failed to fetch facility details: {response.status}")
+                data = await response.json()
+                logger.debug(f"Response JSON: {data}")
+                return data
 
 # Initialize the server
 app = OSHubServer("os_hub_server")
@@ -113,6 +133,20 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["query"]
             },
+        ),
+        Tool(
+            name="get_facility_details",
+            description="Get detailed information for a specific facility by OS ID.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "os_id": {
+                        "type": "string",
+                        "description": "The Open Supply Hub ID of the facility (e.g., GB123)."
+                    }
+                },
+                "required": ["os_id"]
+            },
         )
     ]
 
@@ -125,6 +159,21 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             raise ValueError("Missing 'query' in arguments.")
         data = await app.fetch_facilities(query)
         return [TextContent(type="text", text=json.dumps(data, indent=2))]
+    
+    elif name == "get_facility_details":
+        os_id = arguments.get("os_id", "")
+        if not os_id:
+            raise ValueError("Missing 'os_id' in arguments.")
+        try:
+            data = await app.fetch_facility_by_id(os_id)
+            return [TextContent(type="text", text=json.dumps(data, indent=2))]
+        except ValueError as e:
+            # Handle not found case
+            return [TextContent(type="text", text=str(e))]
+        except Exception as e:
+            # Handle other errors
+            raise RuntimeError(f"Error fetching facility details: {str(e)}")
+    
     else:
         raise ValueError(f"Unknown tool: {name}")
 

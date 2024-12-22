@@ -56,9 +56,9 @@ class OSHubServer(Server):
                 "protocolVersion": "2024-11-05",
                 "capabilities": {
                     "tools": {
-                        "search_facilities": {
-                            "description": "Search for facilities by query in Open Supply Hub.",
-                            "command": "search_facilities"
+                        "search_production_locations": {
+                            "description": "Search for production locations by query in Open Supply Hub.",
+                            "command": "search_production_locations"
                         }
                     },
                     "resources": {},  # Empty object if no resources
@@ -78,12 +78,12 @@ class OSHubServer(Server):
             logger.error(f"Initialization failed: {e}")
             raise
 
-    async def search_facilities(self, query: str) -> dict[str, Any]:
-        """Search facilities data from Open Supply Hub API."""
+    async def search_production_locations(self, query: str) -> dict[str, Any]:
+        """Search production location data from Open Supply Hub API."""
         if not self._initialized:
             raise RuntimeError("Server is not initialized")
         
-        logger.debug(f"Fetching facilities with query: {query}")
+        logger.debug(f"Fetching production locations with query: {query}")
         headers = {
                 "Authorization": f"Token {API_KEY}",
                  "Accept": "application/json"  # Explicitly request JSON
@@ -101,12 +101,12 @@ class OSHubServer(Server):
                 logger.debug(f"Response JSON: {data}")
                 return data
             
-    async def fetch_facility_by_id(self, os_id: str) -> dict[str, Any]:
-        """Fetch detailed information for a specific facility by OS ID."""
+    async def fetch_production_location_by_id(self, os_id: str) -> dict[str, Any]:
+        """Fetch detailed information for a specific production location by OS ID."""
         if not self._initialized:
             raise RuntimeError("Server is not initialized")
 
-        logger.debug(f"Fetching facility details for OS ID: {os_id}")
+        logger.debug(f"Fetching production location details for OS ID: {os_id}")
         headers = {
             "Authorization": f"Token {API_KEY}",
             "Accept": "application/json"  # Explicitly request JSON
@@ -117,9 +117,9 @@ class OSHubServer(Server):
             async with session.get(url, headers=headers) as response:
                 logger.debug(f"Received response: {response.status}")
                 if response.status == 404:
-                    raise ValueError(f"Facility with OS ID {os_id} not found")
+                    raise ValueError(f"Production location with OS ID {os_id} not found")
                 if response.status != 200:
-                    raise RuntimeError(f"Failed to fetch facility details: {response.status}")
+                    raise RuntimeError(f"Failed to fetch production location details: {response.status}")
                 data = await response.json()
                 logger.debug(f"Response JSON: {data}")
                 return data
@@ -223,28 +223,28 @@ async def list_tools() -> list[Tool]:
     """List available tools."""
     return [
         Tool(
-            name="search_facilities",
-            description="Search for facilities by query in Open Supply Hub.",
+            name="search_production_locations",
+            description="Search for production locations by query in Open Supply Hub.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Query string to search for facilities."
+                        "description": "Query string to search for production locations."
                     }
                 },
                 "required": ["query"]
             },
         ),
         Tool(
-            name="get_facility_details",
-            description="Get detailed information for a specific facility by OS ID.",
+            name="fetch_production_location_by_id",
+            description="Get detailed information for a specific production location by OS ID.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "os_id": {
                         "type": "string",
-                        "description": "The Open Supply Hub ID of the facility (e.g., GB123)."
+                        "description": "The Open Supply Hub ID of the production location(e.g., GB123)."
                     }
                 },
                 "required": ["os_id"]
@@ -341,13 +341,13 @@ async def list_tools() -> list[Tool]:
 @app.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Handle tool calls."""
-    if name == "search_facilities":
+    if name == "search_production_locations":
         query = arguments.get("query", "")
         
         try:
-            data = await app.search_facilities(query)
+            data = await app.search_production_locations(query)
             
-            # Format the response to include count and facilities
+            # Format the response to include count and production locations
             formatted_response = {
                 "total_count": data.get('count', 0),
                 "facilities": data.get('data', [])
@@ -355,22 +355,22 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             
             return [TextContent(type="text", text=json.dumps(formatted_response, indent=2))]
         except Exception as e:
-            logger.error(f"Error searching facilities: {e}")
+            logger.error(f"Error searching prodution locations: {e}")
             return [TextContent(type="text", text=f"Error: {str(e)}")]
     
-    elif name == "get_facility_details":
+    elif name == "fetch_production_location_by_id":
         os_id = arguments.get("os_id", "")
         if not os_id:
             raise ValueError("Missing 'os_id' in arguments.")
         try:
-            data = await app.fetch_facility_by_id(os_id)
+            data = await app.fetch_production_location_by_id(os_id)
             return [TextContent(type="text", text=json.dumps(data, indent=2))]
         except ValueError as e:
             # Handle not found case
             return [TextContent(type="text", text=str(e))]
         except Exception as e:
             # Handle other errors
-            raise RuntimeError(f"Error fetching facility details: {str(e)}")
+            raise RuntimeError(f"Error fetching production location details: {str(e)}")
         
     elif name == "create_production_location":
         try:
@@ -468,7 +468,7 @@ async def main():
                                     "capabilities": {
                                         "tools": {
                                             "search_facilities": {
-                                                "description": "Search for facilities by query in Open Supply Hub.",
+                                                "description": "Search for production location by query in Open Supply Hub.",
                                                 "command": "search_facilities"
                                             }
                                         },

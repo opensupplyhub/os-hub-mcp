@@ -78,6 +78,67 @@ class OSHubServer(Server):
             logger.error(f"Initialization failed: {e}")
             raise
 
+    async def list_moderation_events(self, limit=10, search_after=None) -> dict[str, Any]:
+        """
+        Fetch a list of moderation events from the Open Supply Hub API.
+        """
+        if not self._initialized:
+            raise RuntimeError("Server is not initialized")
+
+        logger.debug(f"Fetching moderation events with limit={limit}, search_after={search_after}")
+        headers = {
+            "Authorization": f"Token {API_KEY}",
+            "Accept": "application/json",
+        }
+        params = {"limit": limit}
+        if search_after:
+            params["search_after"] = search_after
+
+        url = f"{API_BASE_URL}/v1/moderation-events/"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, headers=headers) as response:
+                logger.debug(f"Received response: {response.status}")
+                if response.status == 200:
+                    data = await response.json()
+                    logger.debug(f"Moderation events response JSON: {data}")
+                    return data
+                else:
+                    raise RuntimeError(f"Failed to fetch moderation events: {response.status}")
+                
+    async def merge_moderation_into_facility(self, moderation_id: str, os_id: str) -> dict[str, Any]:
+        """
+        Merge contributed data from a moderation event into an existing facility (os_id).
+        """
+        if not self._initialized:
+            raise RuntimeError("Server is not initialized")
+
+        logger.debug(f"Merging moderation event {moderation_id} into facility {os_id}")
+        headers = {
+            "Authorization": f"Token {API_KEY}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        url = f"{API_BASE_URL}/v1/moderation-events/{moderation_id}/production-locations/{os_id}/"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.patch(url, headers=headers) as response:
+                logger.debug(f"Received response: {response.status}")
+                
+                if response.status == 202:  # Accepted
+                    data = await response.json()
+                    logger.debug(f"Merge response: {data}")
+                    return data
+                elif response.status == 401:
+                    raise PermissionError("Unauthorized. Check your API key.")
+                elif response.status == 403:
+                    raise PermissionError("Forbidden. User may not be confirmed.")
+                elif response.status == 404:
+                    raise ValueError(f"Moderation event or facility {os_id} not found.")
+                elif response.status == 410:
+                    raise ValueError("Moderation event is not in PENDING status.")
+                else:
+                    raise RuntimeError(f"Failed to merge moderation into facility: {response.status}")
+
     async def search_production_locations(self, query: str) -> dict[str, Any]:
         """Search production location data from Open Supply Hub API."""
         if not self._initialized:
@@ -152,6 +213,38 @@ class OSHubServer(Server):
                     raise ValueError(f"Validation error: {error_data}")
                 else:
                     raise RuntimeError(f"Failed to submit location: {response.status}")
+                
+    async def update_production_location(self, os_id: str, update_data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Update information for an existing production location using its OS ID.
+        """
+        if not self._initialized:
+            raise RuntimeError("Server is not initialized")
+
+        logger.debug(f"Updating production location {os_id} with data: {update_data}")
+        headers = {
+            "Authorization": f"Token {API_KEY}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        url = f"{API_BASE_URL}/v1/production-locations/{os_id}/"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.patch(url, headers=headers, json=update_data) as response:
+                logger.debug(f"Received response: {response.status}")
+                
+                if response.status == 202:  # Accepted
+                    data = await response.json()
+                    logger.debug(f"Update response: {data}")
+                    return data
+                elif response.status == 401:
+                    raise PermissionError("Unauthorized. Check your API key.")
+                elif response.status == 403:
+                    raise PermissionError("Forbidden. User may not be confirmed.")
+                elif response.status == 404:
+                    raise ValueError(f"Production location {os_id} not found.")
+                else:
+                    raise RuntimeError(f"Failed to update production location: {response.status}")
 
     async def moderate_production_location(self, moderation_id: str) -> dict[str, Any]:
         """Create a new production location based on a moderation event."""
@@ -289,6 +382,24 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="merge_moderation_into_facility",
+            description="Merge contributed data from a moderation event into an existing facility.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "moderation_id": {
+                        "type": "string",
+                        "description": "The unique identifier of the moderation event.",
+                    },
+                    "os_id": {
+                        "type": "string",
+                        "description": "The Open Supply Hub ID of the existing facility.",
+                    },
+                },
+                "required": ["moderation_id", "os_id"],
+            },
+        ),
+        Tool(
             name="moderate_production_location",
             description="Create a new production location based on a moderation event.",
             inputSchema={
@@ -300,6 +411,42 @@ async def list_tools() -> list[Tool]:
                     }
                 },
                 "required": ["moderation_id"]
+            },
+        ),
+        Tool(
+            name="list_moderation_events",
+            description="Fetch a list of moderation events from Open Supply Hub.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of moderation events to fetch (default 10).",
+                    },
+                    "search_after": {
+                        "type": "string",
+                        "description": "Pagination cursor to fetch the next page of results.",
+                    },
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="update_production_location",
+            description="Update information for an existing production location.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "os_id": {
+                        "type": "string",
+                        "description": "The Open Supply Hub ID of the production location to update.",
+                    },
+                    "update_data": {
+                        "type": "object",
+                        "description": "A dictionary containing the fields to update and their new values.",
+                    },
+                },
+                "required": ["os_id", "update_data"],
             },
         ),
         Tool(
@@ -414,6 +561,61 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         except Exception as e:
             logger.error(f"Error moderating production location: {e}")
             return [TextContent(type="text", text=f"Error: {str(e)}")]
+        
+    elif name == "list_moderation_events":
+        try:
+            limit = arguments.get("limit", 10)
+            search_after = arguments.get("search_after")
+            if not isinstance(limit, int) or limit <= 0:
+                raise ValueError("The 'limit' parameter must be a positive integer.")
+            
+            data = await app.list_moderation_events(limit=limit, search_after=search_after)
+            formatted_response = {
+                "total_count": data.get("count", 0),
+                "events": data.get("data", []),
+            }
+            return [TextContent(type="text", text=json.dumps(formatted_response, indent=2))]
+        except Exception as e:
+            logger.error(f"Error fetching moderation events: {e}")
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+    
+    elif name == "merge_moderation_into_facility":
+        try:
+            moderation_id = arguments.get("moderation_id")
+            os_id = arguments.get("os_id")
+
+            if not moderation_id or not os_id:
+                raise ValueError("Both 'moderation_id' and 'os_id' are required.")
+
+            data = await app.merge_moderation_into_facility(moderation_id, os_id)
+
+            formatted_response = {
+                "status": "Merge successful",
+                "details": data,
+            }
+            return [TextContent(type="text", text=json.dumps(formatted_response, indent=2))]
+        except Exception as e:
+            logger.error(f"Error merging moderation event into facility: {e}")
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+        
+    elif name == "update_production_location":
+        try:
+            os_id = arguments.get("os_id")
+            update_data = arguments.get("update_data", {})
+
+            if not os_id or not update_data:
+                raise ValueError("Both 'os_id' and 'update_data' are required.")
+
+            data = await app.update_production_location(os_id, update_data)
+
+            formatted_response = {
+                "status": "Update successful",
+                "details": data,
+            }
+            return [TextContent(type="text", text=json.dumps(formatted_response, indent=2))]
+        except Exception as e:
+            logger.error(f"Error updating production location: {e}")
+            return [TextContent(type="text", text=f"Error: {str(e)}")]  
     
     elif name == "contribute_to_production_location":
         try:
